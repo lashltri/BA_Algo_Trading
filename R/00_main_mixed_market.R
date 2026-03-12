@@ -9,7 +9,7 @@ source("R/backtesting.R")
 source("R/Hypothesis_Testing.R")
 source("R/Strategies/BuyHold.R")
 source("R/feature_engineering.R")
-source("R/Strategies/FNN.R")
+source("R/Strategies/simpleFNN.R")
 
 
 ## ---- main_config
@@ -26,8 +26,7 @@ PARAMS <- list(
   NN = NULL
 )
 
-max_train_date <- "2017-12-31"
-max_validation_date <- "2018-12-31"
+max_train_date <- "2018-12-31"
 
 ## ---- main_data
 #Data--------------------------------------------------------------------------- 
@@ -77,9 +76,13 @@ FEATS <- list(SSMI = feature_eng(data = px_list$SSMI, lags = 5, train_split = ma
 ## ---- main_signals
 #indicators and signals---------------------------------------------------------
 STRATS$BH <- lapply(px_list, strat_bh)
-STRATS$NN <- lapply(FEATS, function(x){simple_FNN(x, max_train_date, max_validation_date)})
+STRATS$NN <- Map(
+  function(x, nm) rolling_framework(x, FUN = simple_FNN, index_name = nm),
+  FEATS,
+  names(FEATS)
+)
+names(STRATS$NN) <- names(FEATS)
 
-simple_FNN(feats = FEATS$SSMI, train_split = max_train_date, valid_split = max_validation_date)
 
 ## ---- main_backtests
 # Backtests ---------------------------------------------------------------
