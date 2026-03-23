@@ -5,12 +5,14 @@ library(lubridate)
 library(fGarch)
 library(neuralnet)
 
-source("R/backtesting.R")
+source("R/eval_utils.R")
 source("R/Hypothesis_Testing.R")
 source("R/Strategies/BuyHold.R")
 source("R/feature_engineering.R")
+source("R/Rolling_Framework.R")
 source("R/Strategies/simpleFNN.R")
 
+options(scipen = 999)
 
 ## ---- main_config
 #Config-------------------------------------------------------------------------
@@ -22,9 +24,7 @@ date_from_to <- paste0(date_from, "::", date_to)
 
 STRATS <- list()
 
-PARAMS <- list(
-  NN = NULL
-)
+FEATS <- list()
 
 max_train_date <- "2018-12-31"
 
@@ -59,35 +59,46 @@ px_list$`GC=F`$`GC=F.Adjusted`[px_list$`GC=F`$`GC=F.Adjusted`<= 0]<-0.01
 # --- feature engineering
 # Feature Engineering-----------------------------------------------------------
 # NOT SURE IF DIFFERENT FOR EACH STRATEGY
-FEATS <- list(SSMI = feature_eng(data = px_list$SSMI, lags = 5, train_split = max_train_date),
-              GSPC = feature_eng(data = px_list$GSPC, lags = 5, train_split = max_train_date),
-              IXIC = feature_eng(data = px_list$IXIC, lags = 5, train_split = max_train_date),
-              GDAXI = feature_eng(data = px_list$GDAXI, lags = 5, train_split = max_train_date),
-              `BTC-USD` = feature_eng(data = px_list$`BTC-USD`, lags = 5, train_split = max_train_date),
-              `CL=F` = feature_eng(data = px_list$`CL=F`, lags = 5, train_split = max_train_date),
-              `NG=F` = feature_eng(data = px_list$`NG=F`, lags = 5, train_split = max_train_date),
-              `GC=F` = feature_eng(data = px_list$`GC=F`, lags = 5, train_split = max_train_date),
-              `SI=F`= feature_eng(data = px_list$`SI=F`, lags = 5, train_split = max_train_date),
-              `HG=F` = feature_eng(data = px_list$`HG=F`, lags = 5, train_split = max_train_date)
+FEATS$FULL <- list(SSMI = feature_eng(data = px_list$SSMI, train_split = max_train_date),
+              GSPC = feature_eng(data = px_list$GSPC, train_split = max_train_date),
+              IXIC = feature_eng(data = px_list$IXIC, train_split = max_train_date),
+              GDAXI = feature_eng(data = px_list$GDAXI, train_split = max_train_date),
+              `BTC-USD` = feature_eng(data = px_list$`BTC-USD`, train_split = max_train_date),
+              `CL=F` = feature_eng(data = px_list$`CL=F`, train_split = max_train_date),
+              `NG=F` = feature_eng(data = px_list$`NG=F`, train_split = max_train_date),
+              `GC=F` = feature_eng(data = px_list$`GC=F`, train_split = max_train_date),
+              `SI=F`= feature_eng(data = px_list$`SI=F`, train_split = max_train_date),
+              `HG=F` = feature_eng(data = px_list$`HG=F`, train_split = max_train_date)
               )
 
 
+FEATS$BASE_NN <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "rt_lag1", 
+                                                      "rt_lag2", "rt_lag3", 
+                                                      "rt_lag4", "rt_lag5")])
+FEATS$ARMA_NN <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "arma_mu_t",
+                                                      "sigma_t",
+                                                      "eps_t", "eps_lag1", 
+                                                      "eps_lag2")])
 
-## ---- main_signals
+
+
+## ---- main_Rolling_signal_and_backtests
 #indicators and signals---------------------------------------------------------
 STRATS$BH <- lapply(px_list, strat_bh)
-STRATS$NN <- Map(
+
+STRATS$BASE_NN <- Map(
   function(x, nm) rolling_framework(x, FUN = simple_FNN, index_name = nm),
-  FEATS,
-  names(FEATS)
+  FEATS$BASE_NN,
+  names(FEATS$BASE_NN)
 )
-names(STRATS$NN) <- names(FEATS)
 
 
-## ---- main_backtests
-# Backtests ---------------------------------------------------------------
 
-BACKT <- list(BH = lapply(STRATS$BH, function(x){backtest_log_ret(x)}))
+## ---- main_prep returns
+# Prep and align returns -------------------------------------------------------
+
+BACKT <- list(BH = lapply(STRATS$BH, function(x){prepare_returns(x)}),
+              NN = lapply(STRATS$BASE_NN, function(x){prepare_returns(x)}))
 
 
 #For comparability we want all TS to have intersecting dates
@@ -102,16 +113,18 @@ rm(all_series)
 
 PORTF <- lapply(BACKT, create_portfolio)
 
-
+create_portfolio(x = BACKT$BH)
 
 # Evaluate Backtest Index---------------------------------------------------
 
 EVAL_BT <- list(
-  BH = lapply(BACKT$BH, eval_backtest)
+  BH = lapply(BACKT$BH, eval_backtest),
+  NN = lapply(BACKT$NN, eval_backtest)
 )
 
 EVAL_PORTF <- list(
-  BH = lapply(PORTF$BH, eval_backtest)
+  BH = lapply(PORTF$BH, eval_backtest),
+  NN = lapply(PORTF$NN, eval_backtest)
 )
 
 # Extract Sharpe ratios and Drawdowns into matrices ------------------------ 
@@ -128,7 +141,7 @@ mat_drawdown <- rbind(mat_drawdown,
                       sapply(EVAL_PORTF, function(x) sapply(x, function(y) y$MaxDrawdown)))
 rownames(mat_drawdown)[nrow(mat_drawdown)] <- "portfolio"
 
-
+mat_sharpe
 
 
 # Hypothesis Testing  Backtest Index-----------------------------------------
@@ -146,3 +159,4 @@ ALL_TVALS_DIR <- do.call(rbind, lapply(seq_len(nrow(grid)), function(i) {
   transform(out, strat_A = A, strat_B = B)
 }))
 
+save.image(file = "R/data/workspace.RData")

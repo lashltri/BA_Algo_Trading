@@ -4,11 +4,10 @@ strat_bh <- function(price) {
 
   signal <- rep(1, length(price))
   signal <- reclass(signal, price)
-
+  
+  ret <- suppressWarnings(diff(log(price)))
   
   list(
-    price    = price,
-    signal   = signal,
-    pred_price = NA
-  )
+    return    = ret,
+    signal   = signal)
 }

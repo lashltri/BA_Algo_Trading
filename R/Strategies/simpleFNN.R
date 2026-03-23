@@ -1,20 +1,20 @@
 
 simple_FNN <- function(train_data, test_data,
                        number_neurons = c(12, 6),
-                       num_sim = 20) {
+                       num_sim = 100) {
   
   # preprocess ---------------------------------------------------------------
-  feat_min <- apply(train_data, 2, quantile, probs = 0.01, na.rm = TRUE)
-  feat_max <- apply(train_data, 2, quantile, probs = 0.99, na.rm = TRUE)
+  feat_min <- apply(train_data, 2, min, na.rm = TRUE)
+  feat_max <- apply(train_data, 2, max, na.rm = TRUE)
   
-  scaled_train <- pmin(pmax(train_data, feat_min), feat_max)
-  scaled_test  <- pmin(pmax(test_data,  feat_min), feat_max)
+  scaled_train <- train_data
+  scaled_test  <- test_data
   
-  scaled_train[, -1] <- scale(train_data[, -1],
+  scaled_train[, -1] <- scale(scaled_train[, -1],
                               center = feat_min[-1],
                               scale  = feat_max[-1] - feat_min[-1])
   
-  scaled_test[, -1] <- scale(test_data[, -1],
+  scaled_test[, -1] <- scale(scaled_test[, -1],
                              center = feat_min[-1],
                              scale  = feat_max[-1] - feat_min[-1])
   
@@ -35,7 +35,8 @@ simple_FNN <- function(train_data, test_data,
   signal_out_mat <- xts(matrix(NA_real_, nrow = nrow(test_data), ncol = num_sim),
                              order.by = index(test_data))
   
-  #pb <- txtProgressBar(min = 1, max = num_sim, style = 3)
+  #pb <- txtProgressBar(min = 0, max = num_sim, style = 3)
+  #setTxtProgressBar(pb, 0)
   
   # simulation loop ----------------------------------------------------------
   for (i in 1:num_sim) { #i=1
@@ -44,8 +45,7 @@ simple_FNN <- function(train_data, test_data,
       neuralnet(rt_lag0 ~ .,
                 data = scaled_train,
                 hidden = number_neurons,
-                linear.output = TRUE,
-                stepmax = 1e+05),
+                linear.output = TRUE),
       silent = TRUE
     )
     
@@ -97,24 +97,24 @@ simple_FNN <- function(train_data, test_data,
       cor(sharpe_out, sharpe_in, use = "complete.obs"), "\n")
   
   # Sanity Check ----------------------------------------------------------------
-  if (!is.null(perf_in_mat) && !is.null(perf_out_mat)) {
-    par(mfrow = c(1, 2))
-    plot(cbind(cumsum(perf_in_mat), cumsum(train_data[,1])),
-         col = c(1:ncol(perf_in_mat), 1),
-         lwd = c(rep(1, ncol(perf_in_mat)), 3),
-         main = "In-Sample Performance",
-         ylab = "Cumulative Return")
-    plot(cbind(cumsum(perf_out_mat), cumsum(test_data[,1])),
-         col = c(1:ncol(perf_out_mat), 1),
-         lwd = c(rep(1, ncol(perf_out_mat)), 3),
-         main = "Out-of-Sample Performance",
-         ylab = "Cumulative Return")
-  }
-  
+  # if (!is.null(perf_in_mat) && !is.null(perf_out_mat)) {
+  #   par(mfrow = c(1, 2))
+  #   plot(cbind(cumsum(perf_in_mat), cumsum(train_data[,1])),
+  #        col = c(1:ncol(perf_in_mat), 1),
+  #        lwd = c(rep(1, ncol(perf_in_mat)), 3),
+  #        main = "In-Sample Performance",
+  #        ylab = "Cumulative Return")
+  #   plot(cbind(cumsum(perf_out_mat), cumsum(test_data[,1])),
+  #        col = c(1:ncol(perf_out_mat), 1),
+  #        lwd = c(rep(1, ncol(perf_out_mat)), 3),
+  #        main = "Out-of-Sample Performance",
+  #        ylab = "Cumulative Return")
+  # }
+
 
   
-  return(list(perf_out_avg = perf_out_avg,
-              signal_out_avg = signal_out_avg,
-              perf_in_avg = perf_in_avg,
-              signal_in_avg = signal_in_avg))
+  return(list(return = perf_out_avg,
+              signal = signal_out_avg,
+              
+              return_out_mat = perf_out_mat))
 }
