@@ -19,82 +19,65 @@ simple_FNN <- function(train_data, test_data,
                              scale  = feat_max[-1] - feat_min[-1])
   
   # initialize containers ----------------------------------------------------
-  mse_mat <- matrix(NA_real_, nrow = num_sim, ncol = 2)
+  mse_mat <- matrix(NA, nrow = num_sim, ncol = 2)
   colnames(mse_mat) <- c("In sample MSE", "Out sample MSE")
   
-  sharpe_in  <- rep(NA_real_, num_sim)
-  sharpe_out <- rep(NA_real_, num_sim)
-  
-  perf_in_mat <- xts(matrix(NA_real_, nrow = nrow(train_data), ncol = num_sim),
+  perf_in_mat <- xts(matrix(NA, nrow = nrow(train_data), ncol = num_sim),
                           order.by = index(train_data))
-  perf_out_mat <- xts(matrix(NA_real_, nrow = nrow(test_data), ncol = num_sim),
+  perf_out_mat <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
                            order.by = index(test_data))
   
-  signal_in_mat <- xts(matrix(NA_real_, nrow = nrow(train_data), ncol = num_sim),
+  signal_in_mat <- xts(matrix(NA, nrow = nrow(train_data), ncol = num_sim),
                             order.by = index(train_data))
-  signal_out_mat <- xts(matrix(NA_real_, nrow = nrow(test_data), ncol = num_sim),
+  signal_out_mat <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
                              order.by = index(test_data))
   
-  #pb <- txtProgressBar(min = 0, max = num_sim, style = 3)
-  #setTxtProgressBar(pb, 0)
+  predicted_oos_mat <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
+                        order.by = index(test_data))
+
   
   # simulation loop ----------------------------------------------------------
+  cat("i |", paste(colnames(mse_mat), collapse = " | "), "\n")
   for (i in 1:num_sim) { #i=1
     
     nn_obj <- try(
-      neuralnet(rt_lag0 ~ .,
+      neuralnet(paste(colnames(scaled_train)[1], "~ ."),  # Takes first column as terget variable
                 data = scaled_train,
                 hidden = number_neurons,
                 linear.output = TRUE),
       silent = TRUE
     )
     
-    if (class(nn_obj) == "try-error" || is.null(nn_obj$net.result[[1]])){
-      #setTxtProgressBar(pb, i)
-      next
-    }
+    if (class(nn_obj) == "try-error" || is.null(nn_obj$net.result[[1]])){next}
     
-    predicted_train <- nn_obj$net.result[[1]]
-    predicted_test  <- predict(nn_obj, as.matrix(scaled_test[, -1]))
+    predicted_in <- nn_obj$net.result[[1]]
+    predicted_oos_mat[, i] <- predict(nn_obj, as.matrix(scaled_test[, -1]))
     
-    mse_mat[i, 1] <- mean((scaled_train[, 1] - predicted_train)^2)
-    mse_mat[i, 2] <- mean((scaled_test[, 1] - predicted_test)^2)
+    mse_mat[i, 1] <- mean((scaled_train[, 1] - predicted_in)^2)
+    mse_mat[i, 2] <- mean((scaled_test[, 1] - predicted_oos_mat[, i])^2)
     
-    perf_in_mat[, i]   <- (predicted_train > 0) * train_data[,1]
-    perf_out_mat[, i]  <- (predicted_test  > 0) * test_data[,1]
+    perf_in_mat[, i]   <- (predicted_in > 0) * train_data[,1]
+    perf_out_mat[, i]  <- (predicted_oos_mat[, i]  > 0) * test_data[,1]
     
-    signal_in_mat[, i]  <- (predicted_train > 0)
-    signal_out_mat[, i] <- (predicted_test  > 0)
+    signal_in_mat[, i]  <- (predicted_in > 0)
+    signal_out_mat[, i] <- (predicted_oos_mat[, i]  > 0)
     
-    sharpe_in[i]  <- SharpeRatio.annualized(perf_in_mat[, i], scale = 252, Rf = 0)
-    sharpe_out[i] <- SharpeRatio.annualized(perf_out_mat[, i], scale = 252, Rf = 0)
     
-    print(c(i, mse_mat[i, ]))
-    #setTxtProgressBar(pb, i)
+    cat(i, "|", paste(round(mse_mat[i, ], 8), collapse = " | "), "\n")
   }
   
-  #close(pb)
   
   # combine successful runs --------------------------------------------------
   
   perf_out_avg <- xts(apply(perf_out_mat, 1, mean), order.by = index(test_data))
   signal_out_avg <- xts(apply(signal_out_mat, 1, mean), order.by = index(test_data))
   
-  perf_in_avg <- xts(apply(perf_in_mat, 1, mean), order.by = index(train_data))
-  signal_in_avg <- xts(apply(signal_in_mat, 1, mean), order.by = index(train_data))
-  
   # summary ------------------------------------------------------------------
   cat("Mean IS MSE:", mean(mse_mat[, 1], na.rm = TRUE),
       "| Mean OOS MSE:", mean(mse_mat[, 2], na.rm = TRUE), "\n")
   cat("Sd IS MSE:", sd(mse_mat[, 1], na.rm = TRUE),
       "| Sd OOS MSE:", sd(mse_mat[, 2], na.rm = TRUE), "\n")
-  cat("Sharpe IS:", mean(sharpe_in, na.rm = TRUE),
-      "| Sharpe OOS:", mean(sharpe_out, na.rm = TRUE), "\n")
-  
-  cat("IS MSE vs. OOS Sharpe Ratio Correlation: ",
-      cor(sharpe_out, mse_mat[, "In sample MSE"], use = "complete.obs"), "\n")
-  cat("IS Sharpe Ratio vs. OOS Sharpe Ratio Correlation: ",
-      cor(sharpe_out, sharpe_in, use = "complete.obs"), "\n")
+
   
   # Sanity Check ----------------------------------------------------------------
   # if (!is.null(perf_in_mat) && !is.null(perf_out_mat)) {
@@ -116,5 +99,6 @@ simple_FNN <- function(train_data, test_data,
   return(list(return = perf_out_avg,
               signal = signal_out_avg,
               
-              return_out_mat = perf_out_mat))
+              return_out_mat = perf_out_mat,
+              predicted_oos_mat = predicted_oos_mat))
 }
