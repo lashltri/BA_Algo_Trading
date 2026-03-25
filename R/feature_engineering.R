@@ -67,13 +67,13 @@ feature_eng <- function(data, train_split, lags = 5, seasonal_lags =  NULL){
   ag_oos <- arma_garch_oos(r_out = r_out, AG = AG, r_in = r_in)
   
   arma_mu_t    <- reclass(c(mu_in, ag_oos$mu), returns)
-  sigma_t <- reclass(c(sigma_in, ag_oos$sigma), returns)
+  garch_sd_t <- reclass(c(sigma_in, ag_oos$sigma), returns)
   eps_t   <- reclass(c(eps_in,   ag_oos$eps),   returns)   #EPS t not lagged can only be used as a target variable!!!!!!!!!!!!!!
   eps_lag1  <- reclass(lag(eps_t, k = 1),   returns)
   eps_lag2  <- reclass(lag(eps_t, k = 2),   returns)
   
-  ag_feats <- cbind(arma_mu_t, sigma_t, eps_t, eps_lag1, eps_lag2)
-  colnames(ag_feats) <- c("arma_mu_t", "sigma_t", "eps_t", "eps_lag1", "eps_lag2")
+  ag_feats <- cbind(arma_mu_t, garch_sd_t, eps_t, eps_lag1, eps_lag2)
+  colnames(ag_feats) <- c("arma_mu_t", "garch_sd_t", "eps_t", "eps_lag1", "eps_lag2")
   
   #final features------------------------------------------
   data_mat <- cbind(lag_mat, roll_feats, ag_feats)
