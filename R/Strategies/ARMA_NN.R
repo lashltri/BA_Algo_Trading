@@ -33,8 +33,8 @@ ARMA_FNN <- function(train_data, test_data) {
               eps_hat_avg = reclass(rowMeans(eps_hat_oos_runs), arma_y_oos)))
 }
 
-par(mfrow = c(2,2))
-plot(xts(apply(pred_hat_oos_runs, 1, mean), order.by = index(pred_hat_oos_runs)))
-plot(test_data$rt_lag0)
-plot(arma_y_oos)
+# par(mfrow = c(2,2))
+# plot(xts(apply(pred_hat_oos_runs, 1, mean), order.by = index(pred_hat_oos_runs)))
+# plot(test_data$rt_lag0)
+# plot(arma_y_oos)
 plot(eps_hat_oos_avg)
