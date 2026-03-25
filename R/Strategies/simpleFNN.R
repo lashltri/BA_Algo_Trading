@@ -1,4 +1,3 @@
-
 simple_FNN <- function(train_data, test_data,
                        number_neurons = c(12, 6),
                        num_sim = 100) {
@@ -19,29 +18,29 @@ simple_FNN <- function(train_data, test_data,
                              scale  = feat_max[-1] - feat_min[-1])
   
   # initialize containers ----------------------------------------------------
-  mse_mat <- matrix(NA, nrow = num_sim, ncol = 2)
-  colnames(mse_mat) <- c("In sample MSE", "Out sample MSE")
+  mse_runs <- matrix(NA, nrow = num_sim, ncol = 2)
+  colnames(mse_runs) <- c("In sample MSE", "Out sample MSE")
   
-  perf_in_mat <- xts(matrix(NA, nrow = nrow(train_data), ncol = num_sim),
-                          order.by = index(train_data))
-  perf_out_mat <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
-                           order.by = index(test_data))
+  ret_is_runs <- xts(matrix(NA, nrow = nrow(train_data), ncol = num_sim),
+                     order.by = index(train_data))
+  ret_oos_runs <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
+                      order.by = index(test_data))
   
-  signal_in_mat <- xts(matrix(NA, nrow = nrow(train_data), ncol = num_sim),
-                            order.by = index(train_data))
-  signal_out_mat <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
-                             order.by = index(test_data))
+  signal_is_runs <- xts(matrix(NA, nrow = nrow(train_data), ncol = num_sim),
+                        order.by = index(train_data))
+  signal_oos_runs <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
+                         order.by = index(test_data))
   
-  predicted_oos_mat <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
-                        order.by = index(test_data))
-
+  pred_oos_runs <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
+                       order.by = index(test_data))
+  
   
   # simulation loop ----------------------------------------------------------
-  cat("i |", paste(colnames(mse_mat), collapse = " | "), "\n")
-  for (i in 1:num_sim) { #i=1
+  cat("i |", paste(colnames(mse_runs), collapse = " | "), "\n")
+  for (i in 1:num_sim) {
     
     nn_obj <- try(
-      neuralnet(paste(colnames(scaled_train)[1], "~ ."),  # Takes first column as terget variable
+      neuralnet(paste(colnames(scaled_train)[1], "~ ."),
                 data = scaled_train,
                 hidden = number_neurons,
                 linear.output = TRUE),
@@ -50,55 +49,55 @@ simple_FNN <- function(train_data, test_data,
     
     if (class(nn_obj) == "try-error" || is.null(nn_obj$net.result[[1]])){next}
     
-    predicted_in <- nn_obj$net.result[[1]]
-    predicted_oos_mat[, i] <- predict(nn_obj, as.matrix(scaled_test[, -1]))
+    pred_is <- nn_obj$net.result[[1]]
+    pred_oos_runs[, i] <- predict(nn_obj, as.matrix(scaled_test[, -1]))
     
-    mse_mat[i, 1] <- mean((scaled_train[, 1] - predicted_in)^2)
-    mse_mat[i, 2] <- mean((scaled_test[, 1] - predicted_oos_mat[, i])^2)
+    mse_runs[i, 1] <- mean((scaled_train[, 1] - pred_is)^2)
+    mse_runs[i, 2] <- mean((scaled_test[, 1] - pred_oos_runs[, i])^2)
     
-    perf_in_mat[, i]   <- (predicted_in > 0) * train_data[,1]
-    perf_out_mat[, i]  <- (predicted_oos_mat[, i]  > 0) * test_data[,1]
+    ret_is_runs[, i]   <- (pred_is > 0) * train_data[,1]
+    ret_oos_runs[, i]  <- (pred_oos_runs[, i]  > 0) * test_data[,1]
     
-    signal_in_mat[, i]  <- (predicted_in > 0)
-    signal_out_mat[, i] <- (predicted_oos_mat[, i]  > 0)
+    signal_is_runs[, i]  <- (pred_is > 0)
+    signal_oos_runs[, i] <- (pred_oos_runs[, i]  > 0)
     
     
-    cat(i, "|", paste(round(mse_mat[i, ], 8), collapse = " | "), "\n")
+    cat(i, "|", paste(round(mse_runs[i, ], 8), collapse = " | "), "\n")
   }
   
   
   # combine successful runs --------------------------------------------------
   
-  perf_out_avg <- xts(apply(perf_out_mat, 1, mean), order.by = index(test_data))
-  signal_out_avg <- xts(apply(signal_out_mat, 1, mean), order.by = index(test_data))
+  ret_oos_avg <- xts(apply(ret_oos_runs, 1, mean), order.by = index(test_data))
+  signal_oos_avg <- xts(apply(signal_oos_runs, 1, mean), order.by = index(test_data))
   
   # summary ------------------------------------------------------------------
-  cat("Mean IS MSE:", mean(mse_mat[, 1], na.rm = TRUE),
-      "| Mean OOS MSE:", mean(mse_mat[, 2], na.rm = TRUE), "\n")
-  cat("Sd IS MSE:", sd(mse_mat[, 1], na.rm = TRUE),
-      "| Sd OOS MSE:", sd(mse_mat[, 2], na.rm = TRUE), "\n")
-
+  cat("Mean IS MSE:", mean(mse_runs[, 1], na.rm = TRUE),
+      "| Mean OOS MSE:", mean(mse_runs[, 2], na.rm = TRUE), "\n")
+  cat("Sd IS MSE:", sd(mse_runs[, 1], na.rm = TRUE),
+      "| Sd OOS MSE:", sd(mse_runs[, 2], na.rm = TRUE), "\n")
+  
   
   # Sanity Check ----------------------------------------------------------------
-  # if (!is.null(perf_in_mat) && !is.null(perf_out_mat)) {
+  # if (!is.null(ret_is_runs) && !is.null(ret_oos_runs)) {
   #   par(mfrow = c(1, 2))
-  #   plot(cbind(cumsum(perf_in_mat), cumsum(train_data[,1])),
-  #        col = c(1:ncol(perf_in_mat), 1),
-  #        lwd = c(rep(1, ncol(perf_in_mat)), 3),
+  #   plot(cbind(cumsum(ret_is_runs), cumsum(train_data[,1])),
+  #        col = c(1:ncol(ret_is_runs), 1),
+  #        lwd = c(rep(1, ncol(ret_is_runs)), 3),
   #        main = "In-Sample Performance",
   #        ylab = "Cumulative Return")
-  #   plot(cbind(cumsum(perf_out_mat), cumsum(test_data[,1])),
-  #        col = c(1:ncol(perf_out_mat), 1),
-  #        lwd = c(rep(1, ncol(perf_out_mat)), 3),
+  #   plot(cbind(cumsum(ret_oos_runs), cumsum(test_data[,1])),
+  #        col = c(1:ncol(ret_oos_runs), 1),
+  #        lwd = c(rep(1, ncol(ret_oos_runs)), 3),
   #        main = "Out-of-Sample Performance",
   #        ylab = "Cumulative Return")
   # }
-
-
   
-  return(list(return = perf_out_avg,
-              signal = signal_out_avg,
+  
+  
+  return(list(return = ret_oos_avg,
+              signal = signal_oos_avg,
               
-              return_out_mat = perf_out_mat,
-              predicted_oos_mat = predicted_oos_mat))
+              return_out_mat = ret_oos_runs,
+              predicted_oos_mat = pred_oos_runs))
 }

@@ -21,56 +21,55 @@ rolling_framework <- function(feats, FUN = simple_FNN, index_name = NULL) {
     
     if (i == 6) {
       signal_oos <- results$signal
-      return_oos   <- results$return
+      ret_oos    <- results$return
       
-      return_out_n_mat <- results$return_out_mat
+      ret_oos_runs <- results$return_out_mat
       
     } else {
       signal_oos <- rbind(signal_oos, results$signal)
-      return_oos   <- rbind(return_oos, results$return)
+      ret_oos    <- rbind(ret_oos, results$return)
       
-      return_out_n_mat <- rbind(return_out_n_mat, results$return_out_mat)
-
+      ret_oos_runs <- rbind(ret_oos_runs, results$return_out_mat)
+      
     }
     
   }
   close(pb)
   
   # Sharpe metrics  -----------------------------------------
-  sharpe <- as.numeric(SharpeRatio.annualized(return_oos, scale = 252, Rf = 0))
-  sharpe_nn <- apply(return_out_n_mat, 2 ,function(r) {mean(r) / sd(r) * sqrt(252)})
-  sd_sharpe <- sd(sharpe_nn) / sqrt(length(sharpe_nn))
+  sharpe_oos <- as.numeric(SharpeRatio.annualized(ret_oos, scale = 252, Rf = 0))
+  sharpe_nn <- apply(ret_oos_runs, 2, function(r) {mean(r) / sd(r) * sqrt(252)})
+  se_sharpe_oos <- sd(sharpe_nn) / sqrt(length(sharpe_nn))
   sd_sharpe_nn <- sd(sharpe_nn)
   
   cat(paste0(
     "\n",
     index_name,
-    " | OOS Sharpe: ", round(as.numeric(sharpe), 3),
+    " | OOS Sharpe: ", round(as.numeric(sharpe_oos), 3),
     "\n"
   ))
   
   # sanity check--------------------------------------
   # par(mfrow = c(2,1))
-  # plot(cumsum(return_oos), col = 2)
-  # plot(cumsum(return_oos), col = 2)
-  # lines(cumsum(feats$rt_lag0[index(return_oos)]), col =1)
+  # plot(cumsum(ret_oos), col = 2)
+  # plot(cumsum(ret_oos), col = 2)
+  # lines(cumsum(feats$rt_lag0[index(ret_oos)]), col =1)
   # 
-  # plot(cumsum(return_out_n_mat))
+  # plot(cumsum(ret_oos_runs))
   # 
   # plot(signal_oos)
   # plot(feats$sigma_t[index(signal_oos)])
   
-
+  
   return(list(
-    return   = return_oos,
+    return = ret_oos,
     signal = signal_oos,
-    info = list(sharpe_oos = sharpe,
-                sd_sharpe_oos = sd_sharpe,
+    info = list(sharpe_oos = sharpe_oos,
+                sd_sharpe_oos = se_sharpe_oos,
                 sharpe_nn = sharpe_nn, 
                 sd_sharpe_nn = sd_sharpe_nn,
-                return_out_n_mat = return_out_n_mat)
+                return_out_n_mat = ret_oos_runs)
   ))
 }
 
-# feats = FEATS$SSMI
 
