@@ -1,6 +1,6 @@
-# feats = FEATS$SSMI
+#feats = FEATS$ARMA_NN$SSMI
 
-rolling_framework <- function(feats, FUN = simple_FNN, index_name = NULL) {
+rolling_framework <- function(feats, FUN, index_name = NULL) {
   
   year_idx <- year(as.Date(index(feats)))
   years <- unique(year_idx)
@@ -66,9 +66,9 @@ rolling_framework <- function(feats, FUN = simple_FNN, index_name = NULL) {
     signal = signal_oos,
     info = list(sharpe_oos = sharpe_oos,
                 sd_sharpe_oos = se_sharpe_oos,
-                sharpe_nn = sharpe_nn, 
-                sd_sharpe_nn = sd_sharpe_nn,
-                return_out_n_mat = ret_oos_runs)
+                sharpe_runs = sharpe_nn, 
+                sd_sharpe_runs = sd_sharpe_nn,
+                return_out_runs = ret_oos_runs)
   ))
 }
 
