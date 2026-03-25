@@ -1,22 +1,20 @@
-train_data <- FEATS$ARMA_NN$SSMI[index(FEATS$ARMA_NN$SSMI) < "2018-12-31", ]
-test_data <- FEATS$ARMA_NN$SSMI[index(FEATS$ARMA_NN$SSMI) > "2018-12-31", ]
+# train_data <- FEATS$ARMA_NN$SSMI[index(FEATS$ARMA_NN$SSMI) < "2018-12-31", ]
+# test_data <- FEATS$ARMA_NN$SSMI[index(FEATS$ARMA_NN$SSMI) > "2018-12-31", ]
 
 ARMA_FNN <- function(train_data, test_data) {
   arma_y_is  <- train_data$arma_y_t
   arma_y_oos <- test_data$arma_y_t
   
-  # eps_is <- train_data[, c("eps_t")]
-  # eps_oos <- test_data[, c("eps_t")]
-  
   nn_train <- train_data[, c("eps_t", "arma_y_t", "garch_sd_t")]
   nn_test  <- test_data[, c("eps_t", "arma_y_t", "garch_sd_t")]
   
   nn_results <- simple_FNN(train_data = nn_train, test_data = nn_test, 
-                           number_neurons = c(12, 6), num_sim = 10)
+                           number_neurons = c(12, 6), num_sim = 100)
   
   eps_hat_oos_runs <- nn_results$predicted_oos_mat
   eps_hat_oos_avg <- xts(rowMeans(nn_results$predicted_oos_mat),
                          order.by = index(nn_results$predicted_oos_mat))
+
   
   # Predicted returns
   pred_hat_oos_runs <- as.numeric(arma_y_oos) + eps_hat_oos_runs
