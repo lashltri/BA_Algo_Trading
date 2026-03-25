@@ -59,21 +59,21 @@ feature_eng <- function(data, train_split, lags = 5, seasonal_lags =  NULL){
                  trace = FALSE)
   
   # in-sample objects
-  mu_in    <- fitted(AG)
+  y_t_in    <- fitted(AG)
   sigma_in <- AG@sigma.t
   eps_in   <- residuals(AG)
   
   # recursive OOS forecasts
   ag_oos <- arma_garch_oos(r_out = r_out, AG = AG, r_in = r_in)
   
-  arma_mu_t    <- reclass(c(mu_in, ag_oos$mu), returns)
+  arma_y_t    <- reclass(c(y_t_in, ag_oos$y), returns)
   garch_sd_t <- reclass(c(sigma_in, ag_oos$sigma), returns)
   eps_t   <- reclass(c(eps_in,   ag_oos$eps),   returns)   #EPS t not lagged can only be used as a target variable!!!!!!!!!!!!!!
   eps_lag1  <- reclass(lag(eps_t, k = 1),   returns)
   eps_lag2  <- reclass(lag(eps_t, k = 2),   returns)
   
-  ag_feats <- cbind(arma_mu_t, garch_sd_t, eps_t, eps_lag1, eps_lag2)
-  colnames(ag_feats) <- c("arma_mu_t", "garch_sd_t", "eps_t", "eps_lag1", "eps_lag2")
+  ag_feats <- cbind(arma_y_t, garch_sd_t, eps_t, eps_lag1, eps_lag2)
+  colnames(ag_feats) <- c("arma_y_t", "garch_sd_t", "eps_t", "eps_lag1", "eps_lag2")
   
   #final features------------------------------------------
   data_mat <- cbind(lag_mat, roll_feats, ag_feats)
@@ -90,7 +90,7 @@ feature_eng <- function(data, train_split, lags = 5, seasonal_lags =  NULL){
 #--------------------------------- Helper---------------------------------------
 arma_garch_oos<-function(r_out, AG, r_in)
 {
-  mu_t    <- rep(NA, length(r_out))
+  y_t    <- rep(NA, length(r_out))
   sigma_t <- rep(NA, length(r_out))
   eps_t   <- rep(NA, length(r_out))
   
@@ -110,9 +110,9 @@ arma_garch_oos<-function(r_out, AG, r_in)
    # On out-of-sample span
   for (i in 1:length(r_out))
   {
-    mu_t[i] <- mu + ar * r_prev + ma * eps_prev
+    y_t[i] <- mu + ar * r_prev + ma * eps_prev
     sigma_t[i] <- sqrt(omega + alpha * eps_prev^2 + beta * sigma_prev^2)
-    eps_t[i] <- as.numeric(r_out[i]) - mu_t[i]
+    eps_t[i] <- as.numeric(r_out[i]) - y_t[i]
     
     # update recursion
     r_prev     <- as.numeric(r_out[i])
@@ -120,7 +120,7 @@ arma_garch_oos<-function(r_out, AG, r_in)
     sigma_prev <- sigma_t[i]
   }
 
-  return(list(mu = mu_t, sigma = sigma_t, eps = eps_t))
+  return(list(y = y_t, sigma = sigma_t, eps = eps_t))
 }
 
 
