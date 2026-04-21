@@ -11,6 +11,7 @@ source("R/Strategies/BuyHold.R")
 source("R/feature_engineering.R")
 source("R/Rolling_Framework.R")
 source("R/Strategies/simpleFNN.R")
+source("R/Strategies/nn_functions/neuralnet_functions.R")
 
 options(scipen = 999)
 
@@ -74,11 +75,15 @@ FEATS$FULL <- list(SSMI = feature_eng(data = px_list$SSMI, train_split = max_tra
 
 FEATS$BASE_NN <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "rt_lag1", 
                                                       "rt_lag2", "rt_lag3", 
-                                                      "rt_lag4", "rt_lag5")])
-FEATS$ARMA_NN <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "arma_mu_t",
-                                                      "sigma_t",
-                                                      "eps_t", "eps_lag1", 
-                                                      "eps_lag2")])
+                                                      "rt_lag4", "rt_lag5", 
+                                                      "roll_sd_5", "roll_sd_10",
+                                                      "arma_y_t", "garch_sd_t")])
+
+FEATS$ARMA_NN <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "arma_y_t",
+                                                      "garch_sd_t",
+                                                      "u_t", "u_lag1", 
+                                                      "u_lag2", "rt_lag1", 
+                                                      "roll_mean_10")])
 
 
 
@@ -87,18 +92,41 @@ FEATS$ARMA_NN <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "arma_mu_t",
 STRATS$BH <- lapply(px_list, strat_bh)
 
 STRATS$BASE_NN <- Map(
-  function(x, nm) rolling_framework(x, FUN = simple_FNN, index_name = nm),
+  function(x, nm) rolling_framework(x, FUN = simple_FNN_wildi, index_name = nm),
   FEATS$BASE_NN,
   names(FEATS$BASE_NN)
 )
 
 
+STRATS$ARMA_NN <- Map(
+  function(x, nm) rolling_framework(x, FUN = ARMA_FNN, index_name = nm),
+  FEATS$ARMA_NN,
+  names(FEATS$ARMA_NN)
+)
+
+STRATS$LPD_NN <- Map(
+  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm),
+  FEATS$BASE_NN,
+  names(FEATS$BASE_NN)
+)
+
+# train_data <- FEATS$BASE_NN$SSMI[index(FEATS$BASE_NN$SSMI) < "2018-12-31",]
+# test_data <- FEATS$BASE_NN$SSMI[index(FEATS$BASE_NN$SSMI) > "2018-12-31",]
+#c<-LPD_FNN_wildi(train_data, test_data)
+# q<-ARMA_FNN(train_data, test_data)
+# w<-simple_FNN(train_data, test_data)
+# x<-rolling_framework(FEATS$ARMA_NN$SSMI, FUN = ARMA_FNN)
+# y<-rolling_framework(FEATS$BASE_NN$SSMI, FUN = simple_FNN)
+#z <-rolling_framework(FEATS$BASE_NN$SSMI, FUN = LPD_FNN_wildi)
 
 ## ---- main_prep returns
 # Prep and align returns -------------------------------------------------------
 
 BACKT <- list(BH = lapply(STRATS$BH, function(x){prepare_returns(x)}),
-              NN = lapply(STRATS$BASE_NN, function(x){prepare_returns(x)}))
+              NN = lapply(STRATS$BASE_NN, function(x){prepare_returns(x)}),
+              ARMA_NN = lapply(STRATS$ARMA_NN, function(x){prepare_returns(x)}),
+              LPD = lapply(STRATS$LPD_NN, function(x){prepare_returns(x)})
+              )
 
 
 #For comparability we want all TS to have intersecting dates
@@ -113,18 +141,22 @@ rm(all_series)
 
 PORTF <- lapply(BACKT, create_portfolio)
 
-create_portfolio(x = BACKT$BH)
+
 
 # Evaluate Backtest Index---------------------------------------------------
 
 EVAL_BT <- list(
   BH = lapply(BACKT$BH, eval_backtest),
-  NN = lapply(BACKT$NN, eval_backtest)
+  NN = lapply(BACKT$NN, eval_backtest),
+  ARMA_NN = lapply(BACKT$ARMA_NN, eval_backtest),
+  LPD = lapply(BACKT$LPD, eval_backtest)
 )
 
 EVAL_PORTF <- list(
   BH = lapply(PORTF$BH, eval_backtest),
-  NN = lapply(PORTF$NN, eval_backtest)
+  NN = lapply(PORTF$NN, eval_backtest),
+  ARMA_NN = lapply(PORTF$ARMA_NN, eval_backtest),
+  LPD = lapply(PORTF$LPD, eval_backtest)
 )
 
 # Extract Sharpe ratios and Drawdowns into matrices ------------------------ 
@@ -144,6 +176,10 @@ rownames(mat_drawdown)[nrow(mat_drawdown)] <- "portfolio"
 mat_sharpe
 
 
+mean_exposure <- sapply(PORTF, function(p) mean(attr(p, "signal"), na.rm = TRUE))
+adjusted_sharpe <- as.numeric(mat_sharpe["portfolio", ]) / sqrt(mean_exposure[colnames(mat_sharpe)])
+adjusted_sharpe
+
 # Hypothesis Testing  Backtest Index-----------------------------------------
 STD_RET <- standardized_returns(
   returns = BACKT,
@@ -159,4 +195,4 @@ ALL_TVALS_DIR <- do.call(rbind, lapply(seq_len(nrow(grid)), function(i) {
   transform(out, strat_A = A, strat_B = B)
 }))
 
-save.image(file = "R/data/workspace.RData")
+save.image(file = "R/data/main.RData")
