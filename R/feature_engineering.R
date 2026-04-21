@@ -51,12 +51,10 @@ feature_eng <- function(data, train_split, lags = 5, seasonal_lags =  NULL){
   r_out <- returns[index(returns) >  train_split]
   
   AG <- garchFit(~ arma(1,0) + garch(1,1),
-                 data = r_in,
-                 delta = 2,
-                 include.delta = FALSE,
-                 include.mean = TRUE,
-                 cond.dist = "sstd",
-                 trace = FALSE)
+             data = r_in,
+             delta = 2,
+             include.delta = FALSE,
+             cond.dist = "sstd")
   
   # in-sample objects
   y_t_in    <- fitted(AG)
@@ -72,8 +70,13 @@ feature_eng <- function(data, train_split, lags = 5, seasonal_lags =  NULL){
   eps_lag1  <- reclass(lag(eps_t, k = 1),   returns)
   eps_lag2  <- reclass(lag(eps_t, k = 2),   returns)
   
-  ag_feats <- cbind(arma_y_t, garch_sd_t, eps_t, eps_lag1, eps_lag2)
-  colnames(ag_feats) <- c("arma_y_t", "garch_sd_t", "eps_t", "eps_lag1", "eps_lag2")
+  u_t <- reclass(c(eps_t / garch_sd_t),   returns)
+  u_lag1  <- reclass(lag(u_t, k = 1),   returns)
+  u_lag2  <- reclass(lag(u_t, k = 2),   returns)
+  
+  ag_feats <- cbind(arma_y_t, garch_sd_t, eps_t, eps_lag1, eps_lag2, u_t, u_lag1, u_lag2)
+  colnames(ag_feats) <- c("arma_y_t", "garch_sd_t", "eps_t", "eps_lag1", "eps_lag2",
+                          "u_t", "u_lag1", "u_lag2")
   
   #final features------------------------------------------
   data_mat <- cbind(lag_mat, roll_feats, ag_feats)
@@ -99,7 +102,7 @@ arma_garch_oos<-function(r_out, AG, r_in)
   beta<-AG@fit$coef["beta1"]
   alpha<-AG@fit$coef["alpha1"]
   omega<-AG@fit$coef["omega"]
-  mu <- AG@fit$coef["mu"]
+  mu <- if ("mu" %in% names(AG@fit$coef)) AG@fit$coef["mu"] else 0
   ar <- if ("ar1" %in% names(AG@fit$coef)) AG@fit$coef["ar1"] else 0
   ma <- if ("ma1" %in% names(AG@fit$coef)) AG@fit$coef["ma1"] else 0
   
@@ -122,6 +125,7 @@ arma_garch_oos<-function(r_out, AG, r_in)
 
   return(list(y = y_t, sigma = sigma_t, eps = eps_t))
 }
+
 
 
 #ssmi
