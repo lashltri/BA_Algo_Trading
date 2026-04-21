@@ -16,6 +16,9 @@ rolling_framework <- function(feats, FUN, index_name = NULL) {
     train_data <- feats[year_idx %in% years[(i-5):(i-1)], ]
     test_data  <- feats[year_idx == years[i], ]
     
+    LPD_oos <- NULL
+    LPD_is_list <- list()
+    
     results <- FUN(train_data, test_data)
     setTxtProgressBar(pb, i-5)
     
@@ -25,12 +28,21 @@ rolling_framework <- function(feats, FUN, index_name = NULL) {
       
       ret_oos_runs <- results$return_out_mat
       
+      if (!is.null(results$LPD)) {
+        LPD_oos <- results$LPD$LPD_mean_oos
+        LPD_is_list[[paste0("train_", years[i-5], "_", years[i-1])]] <- results$LPD$LPD_mean_is
+      }
+      
     } else {
       signal_oos <- rbind(signal_oos, results$signal)
       ret_oos    <- rbind(ret_oos, results$return)
       
       ret_oos_runs <- rbind(ret_oos_runs, results$return_out_mat)
       
+      if (!is.null(results$LPD)) {
+        LPD_oos <- rbind(LPD_oos, results$LPD$LPD_mean_oos)
+        LPD_is_list[[paste0("train_", years[i-5], "_", years[i-1])]] <- results$LPD$LPD_mean_is
+      }
     }
     
   }
@@ -68,7 +80,11 @@ rolling_framework <- function(feats, FUN, index_name = NULL) {
                 sd_sharpe_oos = se_sharpe_oos,
                 sharpe_runs = sharpe_nn, 
                 sd_sharpe_runs = sd_sharpe_nn,
-                return_out_runs = ret_oos_runs)
+                return_out_runs = ret_oos_runs),
+    LPD = list(
+      LPD_mean_oos = LPD_oos,
+      LPD_mean_is = LPD_is_list
+    )
   ))
 }
 
