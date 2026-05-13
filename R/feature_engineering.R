@@ -33,17 +33,44 @@ feature_eng <- function(data, train_split, lags = 5, seasonal_lags =  NULL){
   cum_ret_10 <- rollapplyr(ret_lag1, width = 10, FUN = sum, fill = NA)
   cum_ret_20 <- rollapplyr(ret_lag1, width = 20, FUN = sum, fill = NA)
   
-
+  ## rolling log-price trend ----
+  log_price_lag1 <- lag(log(Ad(data)), 1)
+  
+  trend_5 <- rollapplyr(
+    log_price_lag1,
+    width = 5,
+    FUN = function(x) coef(lm(as.numeric(x) ~ seq_along(x)))[2],
+    fill = NA
+  )
+  
+  trend_10 <- rollapplyr(
+    log_price_lag1,
+    width = 10,
+    FUN = function(x) coef(lm(as.numeric(x) ~ seq_along(x)))[2],
+    fill = NA
+  )
+  
+  trend_20 <- rollapplyr(
+    log_price_lag1,
+    width = 20,
+    FUN = function(x) coef(lm(as.numeric(x) ~ seq_along(x)))[2],
+    fill = NA
+  )
+  
+  trend_change <- trend_5 - trend_20
+  
   roll_feats <- cbind(
     roll_sd_5, roll_sd_10, roll_sd_20,
     roll_mean_5, roll_mean_10, roll_mean_20,
-    cum_ret_5, cum_ret_10, cum_ret_20
+    cum_ret_5, cum_ret_10, cum_ret_20,
+    trend_5, trend_10, trend_20, trend_change
   )
   
   colnames(roll_feats) <- c(
     "roll_sd_5", "roll_sd_10", "roll_sd_20",
     "roll_mean_5", "roll_mean_10", "roll_mean_20",
-    "cum_ret_5", "cum_ret_10", "cum_ret_20"
+    "cum_ret_5", "cum_ret_10", "cum_ret_20",
+    "trend_5", "trend_10", "trend_20", "trend_change"
   )
   
   # ARMA-GARCH on training window only -----------------------------------
@@ -66,6 +93,7 @@ feature_eng <- function(data, train_split, lags = 5, seasonal_lags =  NULL){
   
   arma_y_t    <- reclass(c(y_t_in, ag_oos$y), returns)
   garch_sd_t <- reclass(c(sigma_in, ag_oos$sigma), returns)
+  garch_sd_t_lag1 <- lag(garch_sd_t, 1)
   eps_t   <- reclass(c(eps_in,   ag_oos$eps),   returns)   #EPS t not lagged can only be used as a target variable!!!!!!!!!!!!!!
   eps_lag1  <- reclass(lag(eps_t, k = 1),   returns)
   eps_lag2  <- reclass(lag(eps_t, k = 2),   returns)
@@ -74,8 +102,8 @@ feature_eng <- function(data, train_split, lags = 5, seasonal_lags =  NULL){
   u_lag1  <- reclass(lag(u_t, k = 1),   returns)
   u_lag2  <- reclass(lag(u_t, k = 2),   returns)
   
-  ag_feats <- cbind(arma_y_t, garch_sd_t, eps_t, eps_lag1, eps_lag2, u_t, u_lag1, u_lag2)
-  colnames(ag_feats) <- c("arma_y_t", "garch_sd_t", "eps_t", "eps_lag1", "eps_lag2",
+  ag_feats <- cbind(arma_y_t, garch_sd_t, garch_sd_t_lag1, eps_t, eps_lag1, eps_lag2, u_t, u_lag1, u_lag2)
+  colnames(ag_feats) <- c("arma_y_t", "garch_sd_t", "garch_sd_t_lag1", "eps_t", "eps_lag1", "eps_lag2",
                           "u_t", "u_lag1", "u_lag2")
   
   #final features------------------------------------------
