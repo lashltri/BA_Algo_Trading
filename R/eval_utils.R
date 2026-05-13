@@ -10,11 +10,22 @@ prepare_returns <- function(x){
 eval_backtest <- function(x) {
   r <- exp(x) - 1
   sharpe <- SharpeRatio.annualized(r, scale = 252, Rf = 0)
+  
+  signal <- attr(x, "signal")
+  
+  mean_exposure <- mean(signal, na.rm = TRUE)
+  sharpe_adj <- sharpe / sqrt(mean_exposure)
+  
   mdd <- maxDrawdown(r)
+  
+  trading_activity <- round(sum(abs(diff(signal)), na.rm = TRUE))
   
   return(list(
     Sharpe = as.numeric(sharpe),
-    MaxDrawdown = as.numeric(mdd)
+    MaxDrawdown = as.numeric(mdd),
+    Sharpe_adj = as.numeric(sharpe_adj),
+    MeanExposure = as.numeric(mean_exposure),
+    TradingActivity = as.numeric(trading_activity)
   ))
 }
 
