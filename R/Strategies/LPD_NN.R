@@ -1,11 +1,13 @@
 
 
 LPD_FNN_wildi <- function(train_data, test_data,
-                          number_neurons = c(100),
-                          num_sim = 10,
-                          epochs = 200,
-                          learning_rate = 0.3) {
-  
+                          number_neurons = c(16, 8),
+                          num_sim = 10,#100,
+                          epochs = 100,                  #overwritten if ELM = TRUE
+                          learning_rate = 0.03,
+                          ELM = TRUE,
+                          NN_trading = TRUE) {
+  if (ELM == TRUE) epochs = 2
   # preprocess ---------------------------------------------------------------
   feat_min <- apply(train_data, 2, min, na.rm = TRUE)
   feat_max <- apply(train_data, 2, max, na.rm = TRUE)
@@ -54,6 +56,41 @@ LPD_FNN_wildi <- function(train_data, test_data,
       silent = TRUE
     )
     layer_size <- getLayerSize(x_train, y_train, number_neurons)
+    
+    if (isTRUE(ELM)) {
+      params_el <- nn_obj$updated_params
+      
+      cache_hidden <- forwardPropagation(
+        x_train = x_train,
+        params = params_el,
+        list_layer_size = layer_size,
+        linear_output = TRUE,
+        atan_not_sigmoid = FALSE
+      )
+      
+      H <- t(cache_hidden$A_list[[length(layer_size$n_h)]])
+      y <- as.numeric(y_train)
+      
+      fit_el <- lm(y ~ H)
+      coef_el <- coef(fit_el)
+      coef_el[is.na(coef_el)] <- 0
+      
+      params_el$W_list[[length(layer_size$n_h) + 1]] <- matrix(coef_el[-1], nrow = 1)
+      params_el$b_list[[length(layer_size$n_h) + 1]] <- matrix(coef_el[1], nrow = 1)
+      
+      nn_obj$updated_params <- params_el
+      
+      cache_el <- forwardPropagation(
+        x_train = x_train,
+        params = nn_obj$updated_params,
+        list_layer_size = layer_size,
+        linear_output = TRUE,
+        atan_not_sigmoid = FALSE
+      )
+      
+      cost_el <- computeCost(y_train, cache_el)
+      nn_obj$cost_hist[length(nn_obj$cost_hist)] <- cost_el
+    }
     
     cache_is <- forwardPropagation(
       x_train = x_train,
@@ -131,9 +168,6 @@ LPD_FNN_wildi <- function(train_data, test_data,
   mean_LPD_oos<-NULL
   for (k in 1:dim(LPD_array_oos)[3])
     mean_LPD_oos<-cbind(mean_LPD_oos,apply(LPD_array_oos[,,k],2,mean))
-  # par(mfrow=c(1,1))
-  # ts.plot(mean_LPD,col=colo)
-  # legend("topright", colnames(scaled_train[, -1]), lwd = 2, col = colo)
   
   mean_LPD_is<-NULL
   for (k in 1:dim(LPD_array_is)[3])
@@ -167,10 +201,19 @@ LPD_FNN_wildi <- function(train_data, test_data,
     do.call(cbind, lapply(mplot_all_std_list, function(x) x[, "weight_trade_up"])),
     na.rm = TRUE
   )
-  LPD_signal[LPD_signal == 0] <- 0.5
+  LPD_signal[LPD_signal < 0.001] <- 0#.5
   LPD_signal <- xts(LPD_signal,order.by = index(mplot_all_std_list[[1]]))
   
-  ret_oos_avg <- test_data[,1] * LPD_signal * signal_NN_oos_avg
+  if(NN_trading == TRUE){
+    signal_LDP_NN <-  LPD_signal * signal_NN_oos_avg
+  }else{
+    signal_LDP_NN <-  LPD_signal
+  }
+
+  
+  ret_oos_avg <- test_data[,1] * signal_LDP_NN
+  
+  ret_oos_mat <- signal_NN_oos_runs * as.numeric(test_data[,1]) * as.numeric(LPD_signal)
 
     # summary ------------------------------------------------------------------
   cat("Mean IS MSE:", mean(mse_runs[, 1], na.rm = TRUE),
@@ -180,8 +223,10 @@ LPD_FNN_wildi <- function(train_data, test_data,
   
   return(list(
     return = ret_oos_avg,
-    signal = LPD_signal,
-    return_out_mat = ret_oos_avg,
+    signal = signal_LDP_NN,
+    
+    return_out_mat = ret_oos_mat,
+    predicted_oos_mat = NULL,
     
     # extra info
     cost_hist = cost_hist,
