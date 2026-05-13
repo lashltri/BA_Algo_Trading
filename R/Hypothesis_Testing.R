@@ -20,7 +20,6 @@ standardized_returns <- function(returns = BACKT, portf = PORTF) {
   for (strat_name in names(returns)) {
     strategy <- returns[[strat_name]]
     
-    if (strat_name == "AG") {
       # ----- ARMA-GARCH: GARCH(1,1) auf STRATEGIE-RETURNS -----
       std_list <- lapply(strategy, function(r) {
         # r = arma-garch strategy returns (signal * log_ret_out)
@@ -37,16 +36,6 @@ standardized_returns <- function(returns = BACKT, portf = PORTF) {
         colnames(z) <- "z"
         z
       })
-      
-    } else {
-      # ----- alle anderen Strategien: BH-Sigma pro Ticker -----
-      std_list <- Map(function(r, sd) {
-        m <- na.omit(merge(r, sd, join = "inner"))
-        z <- m[, 1] / m[, 2]
-        colnames(z) <- "z"
-        z
-      }, strategy, sigma_bh[names(strategy)])
-    }
     
     standard_ret[[strat_name]] <- std_list
   }
