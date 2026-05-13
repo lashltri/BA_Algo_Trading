@@ -11,10 +11,13 @@ source("R/Strategies/BuyHold.R")
 source("R/feature_engineering.R")
 source("R/Rolling_Framework.R")
 source("R/Strategies/simpleFNN.R")
+source("R/Strategies/LPD_NN.R")
+source("R/Strategies/ARMA_NN.R")
 source("R/Strategies/nn_functions/neuralnet_functions.R")
+source("R/Strategies/nn_functions/quantile_computation_for_risk_management_with LPD_QPD.R")
 
 options(scipen = 999)
-
+set.seed(123)
 ## ---- main_config
 #Config-------------------------------------------------------------------------
 
@@ -73,18 +76,27 @@ FEATS$FULL <- list(SSMI = feature_eng(data = px_list$SSMI, train_split = max_tra
               )
 
 
+FEATS$LPD <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "rt_lag1",
+                                                      "rt_lag2", "rt_lag3",
+                                                      "rt_lag4", "rt_lag5",
+                                                      "roll_sd_5", "roll_sd_10",
+                                                      "arma_y_t", "garch_sd_t"
+                                                  )])
+
 FEATS$BASE_NN <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "rt_lag1", 
                                                       "rt_lag2", "rt_lag3", 
                                                       "rt_lag4", "rt_lag5", 
                                                       "roll_sd_5", "roll_sd_10",
-                                                      "arma_y_t", "garch_sd_t")])
+                                                      "roll_mean_10"
+                                                      )])
 
-FEATS$ARMA_NN <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "arma_y_t",
-                                                      "garch_sd_t",
-                                                      "u_t", "u_lag1", 
-                                                      "u_lag2", "rt_lag1", 
-                                                      "roll_mean_10")])
-
+FEATS$ARMA_NN <- lapply(FEATS$FULL, function(x) x[, c("rt_lag0", "arma_y_t",   
+                                                      "garch_sd_t",            
+                                                      "u_t", "u_lag1",
+                                                      "u_lag2",
+                                                      "rt_lag1",
+                                                      "roll_mean_10"
+                                                      )])
 
 
 ## ---- main_Rolling_signal_and_backtests
@@ -104,10 +116,30 @@ STRATS$ARMA_NN <- Map(
   names(FEATS$ARMA_NN)
 )
 
+STRATS$LPD_ELM_NN <- Map(
+  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm,  ELM = TRUE, NN_trading = TRUE),
+  FEATS$LPD,
+  names(FEATS$LPD)
+)
+
+STRATS$LPD_ELM <- Map(
+  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm,  ELM = TRUE, NN_trading = FALSE),
+  FEATS$LPD,
+  names(FEATS$LPD)
+)
+
 STRATS$LPD_NN <- Map(
-  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm),
-  FEATS$BASE_NN,
-  names(FEATS$BASE_NN)
+  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm,  
+                                    ELM = FALSE, NN_trading = TRUE, learning_rate = 0.3),
+  FEATS$LPD,
+  names(FEATS$LPD)
+)
+
+STRATS$LPD <- Map(
+  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm,  
+                                    ELM = FALSE, NN_trading = FALSE, learning_rate = 0.3),
+  FEATS$LPD,
+  names(FEATS$LPD)
 )
 
 # train_data <- FEATS$BASE_NN$SSMI[index(FEATS$BASE_NN$SSMI) < "2018-12-31",]
@@ -119,13 +151,27 @@ STRATS$LPD_NN <- Map(
 # y<-rolling_framework(FEATS$BASE_NN$SSMI, FUN = simple_FNN)
 #z <-rolling_framework(FEATS$BASE_NN$SSMI, FUN = LPD_FNN_wildi)
 
+# mean_LPD <- STRATS$ARMA_NN$SSMI$LPD$LPD_mean_oos  #plot not correct names and legend
+# par(mfrow = c(1, 1))
+# ts.plot(mean_LPD, col = rainbow(ncol(FEATS$ARMA_NN$SSMI[, -1])))
+# 
+# legend(
+#   "topright",
+#   c(colnames(FEATS$ARMA_NN$SSMI[, -1])),
+#   lwd = 1,
+#   col = rainbow(ncol(FEATS$ARMA_NN$SSMI[, -1]))
+# )
+
 ## ---- main_prep returns
 # Prep and align returns -------------------------------------------------------
 
 BACKT <- list(BH = lapply(STRATS$BH, function(x){prepare_returns(x)}),
               NN = lapply(STRATS$BASE_NN, function(x){prepare_returns(x)}),
               ARMA_NN = lapply(STRATS$ARMA_NN, function(x){prepare_returns(x)}),
-              LPD = lapply(STRATS$LPD_NN, function(x){prepare_returns(x)})
+              LPD_ELM_NN = lapply(STRATS$LPD_ELM_NN, function(x){prepare_returns(x)}),
+              LPD_ELM = lapply(STRATS$LPD_ELM, function(x){prepare_returns(x)}),
+              LPD_NN = lapply(STRATS$LPD_NN, function(x){prepare_returns(x)}),
+              LPD = lapply(STRATS$LPD, function(x){prepare_returns(x)})
               )
 
 
@@ -149,6 +195,9 @@ EVAL_BT <- list(
   BH = lapply(BACKT$BH, eval_backtest),
   NN = lapply(BACKT$NN, eval_backtest),
   ARMA_NN = lapply(BACKT$ARMA_NN, eval_backtest),
+  LPD_ELM_NN = lapply(BACKT$LPD_ELM_NN, eval_backtest),
+  LPD_ELM = lapply(BACKT$LPD_ELM, eval_backtest),
+  LPD_NN = lapply(BACKT$LPD_NN, eval_backtest),
   LPD = lapply(BACKT$LPD, eval_backtest)
 )
 
@@ -156,29 +205,55 @@ EVAL_PORTF <- list(
   BH = lapply(PORTF$BH, eval_backtest),
   NN = lapply(PORTF$NN, eval_backtest),
   ARMA_NN = lapply(PORTF$ARMA_NN, eval_backtest),
+  LPD_ELM_NN = lapply(PORTF$LPD_ELM_NN, eval_backtest),
+  LPD_ELM = lapply(PORTF$LPD_ELM, eval_backtest),
+  LPD_NN = lapply(PORTF$LPD_NN, eval_backtest),
   LPD = lapply(PORTF$LPD, eval_backtest)
 )
 
 # Extract Sharpe ratios and Drawdowns into matrices ------------------------ 
 
 mat_sharpe <- sapply(EVAL_BT, function(x) sapply(x, function(y) y$Sharpe))
+mat_sharpe_adj <- sapply(EVAL_BT, function(x) sapply(x, function(y) y$Sharpe_adj))
 mat_drawdown <- sapply(EVAL_BT, function(x) sapply(x, function(y) y$MaxDrawdown))
+mat_exposure <- sapply(EVAL_BT, function(x) sapply(x, function(y) y$MeanExposure))
+mat_activity <- sapply(EVAL_BT, function(x) sapply(x, function(y) y$TradingActivity))
 
 # Add portfolio rows
 mat_sharpe <- rbind(mat_sharpe,
                     sapply(EVAL_PORTF, function(x) sapply(x, function(y) y$Sharpe)))
 rownames(mat_sharpe)[nrow(mat_sharpe)] <- "portfolio"
 
+mat_sharpe_adj <- rbind(mat_sharpe_adj,
+                    sapply(EVAL_PORTF, function(x) sapply(x, function(y) y$Sharpe_adj)))
+rownames(mat_sharpe_adj)[nrow(mat_sharpe_adj)] <- "portfolio"
+
 mat_drawdown <- rbind(mat_drawdown,
                       sapply(EVAL_PORTF, function(x) sapply(x, function(y) y$MaxDrawdown)))
 rownames(mat_drawdown)[nrow(mat_drawdown)] <- "portfolio"
 
+mat_exposure <- rbind(mat_exposure,
+                      sapply(EVAL_PORTF, function(x) sapply(x, function(y) y$MeanExposure)))
+rownames(mat_exposure)[nrow(mat_exposure)] <- "portfolio"
+
+mat_activity <- rbind(mat_activity,
+  portfolio = round(colMeans(mat_activity, na.rm = TRUE)))
+
 mat_sharpe
+mat_sharpe_adj
+mat_drawdown
+mat_activity
+mat_exposure
 
+# mean_exposure <- sapply(PORTF, function(p) mean(attr(p, "signal"), na.rm = TRUE))
+# adjusted_sharpe <- as.numeric(mat_sharpe["portfolio", ]) / sqrt(mean_exposure[colnames(mat_sharpe)])
+# adjusted_sharpe
+# mean_exposure
 
-mean_exposure <- sapply(PORTF, function(p) mean(attr(p, "signal"), na.rm = TRUE))
-adjusted_sharpe <- as.numeric(mat_sharpe["portfolio", ]) / sqrt(mean_exposure[colnames(mat_sharpe)])
-adjusted_sharpe
+# mats without the extra lpd models
+mat_sharpe_focus <- mat_sharpe[, !colnames(mat_sharpe) %in% c("LPD_ELM", "LPD_NN", "LPD")]
+mat_sharpe_adj_focus <- mat_sharpe_adj[, !colnames(mat_sharpe_adj) %in% c("LPD_ELM", "LPD_NN", "LPD")]
+
 
 # Hypothesis Testing  Backtest Index-----------------------------------------
 STD_RET <- standardized_returns(
