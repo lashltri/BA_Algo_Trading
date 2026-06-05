@@ -10,7 +10,7 @@ rolling_framework <- function(feats, FUN, index_name = NULL, train_years = 5, ..
   
   
   for (i in (train_years + 1):length(years)) {
-    cat("\n","\n","\n", index_name, ": ","Training:", years[i-5], "-", years[i-1],
+    cat("\n","\n","\n", index_name, ": ","Training:", years[i-train_years], "-", years[i-1],
         "| Testing:", years[i], "\n")
     
     train_data <- feats[year_idx %in% years[(i - train_years):(i - 1)], ]
@@ -28,8 +28,9 @@ rolling_framework <- function(feats, FUN, index_name = NULL, train_years = 5, ..
       
       if (!is.null(results$LPD)) {
         LPD_oos <- results$LPD$LPD_mean_oos
+        LPD_sd_oos <- results$LPD$LPD_sd
         LPD_is_list <- list()
-        LPD_is_list[[paste0("train_", years[i-5], "_", years[i-1])]] <- results$LPD$LPD_mean_is
+        LPD_is_list[[paste0("train_", years[i-train_years], "_", years[i-1])]] <- results$LPD$LPD_mean_is
       }
       
     } else {
@@ -41,7 +42,8 @@ rolling_framework <- function(feats, FUN, index_name = NULL, train_years = 5, ..
       
       if (!is.null(results$LPD)) {
         LPD_oos <- rbind(LPD_oos, results$LPD$LPD_mean_oos)
-        LPD_is_list[[paste0("train_", years[i-5], "_", years[i-1])]] <- results$LPD$LPD_mean_is
+        LPD_sd_oos <- rbind(LPD_sd_oos, results$LPD$LPD_sd)
+        LPD_is_list[[paste0("train_", years[i-train_years], "_", years[i-1])]] <- results$LPD$LPD_mean_is
       }
     }
     
@@ -88,7 +90,8 @@ rolling_framework <- function(feats, FUN, index_name = NULL, train_years = 5, ..
                 predicted_out_mat = predicted_oos_runs),
     LPD = list(
       LPD_mean_oos = LPD_oos,
-      LPD_mean_is = LPD_is_list
+      LPD_mean_is = LPD_is_list,
+      LPD_sd_oos = LPD_sd_oos
     )
   ))
 }

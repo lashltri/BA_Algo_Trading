@@ -4,6 +4,7 @@ library(PerformanceAnalytics)
 library(lubridate)
 library(fGarch)
 library(neuralnet)
+#detach("package:dplyr", unload = TRUE)
 
 source("R/eval_utils.R")
 source("R/Hypothesis_Testing.R")
@@ -58,7 +59,7 @@ px_list <- lapply(px_list, function(x) na.approx(x, maxgap=5))
 #lapply(px_list, function(x)any(is.na(c)))         
 px_list$`GC=F`$`GC=F.Adjusted`[px_list$`GC=F`$`GC=F.Adjusted`<= 0]<-0.01
 
-#saveRDS(px_list, file = "R/data/px_list_mixed.rds")
+#save(px_list, file = "R/data/px_list_mixed.Rdata")
 
 # --- feature engineering
 # Feature Engineering-----------------------------------------------------------
@@ -116,14 +117,26 @@ STRATS$ARMA_NN <- Map(
   names(FEATS$ARMA_NN)
 )
 
+
 STRATS$LPD_ELM_NN <- Map(
-  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm,  ELM = TRUE, NN_trading = TRUE),
+  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm,  
+                                    ELM = TRUE, NN_trading = TRUE),
   FEATS$LPD,
   names(FEATS$LPD)
 )
 
+STRATS$LPD_ELM_NN_100 <- Map(
+  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm,  
+                                    ELM = TRUE, NN_trading = TRUE, number_neurons = 100, 
+                                    num_sim = 100, learning_rate = 0.3, epochs_ELM = 10),
+  FEATS$LPD,
+  names(FEATS$LPD)
+) 
+
+
 STRATS$LPD_ELM <- Map(
-  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm,  ELM = TRUE, NN_trading = FALSE),
+  function(x, nm) rolling_framework(x, FUN = LPD_FNN_wildi, index_name = nm,  
+                                    ELM = TRUE, NN_trading = FALSE),
   FEATS$LPD,
   names(FEATS$LPD)
 )
@@ -142,14 +155,14 @@ STRATS$LPD <- Map(
   names(FEATS$LPD)
 )
 
-# train_data <- FEATS$BASE_NN$SSMI[index(FEATS$BASE_NN$SSMI) < "2018-12-31",]
-# test_data <- FEATS$BASE_NN$SSMI[index(FEATS$BASE_NN$SSMI) > "2018-12-31",]
-#c<-LPD_FNN_wildi(train_data, test_data)
+# train_data <- FEATS$BASE_NN$SSMI[index(FEATS$ARMA_NN$SSMI) < "2018-12-31",]
+# test_data <- FEATS$BASE_NN$SSMI[index(FEATS$ARMA_NN$SSMI) > "2018-12-31",]
+# c<-LPD_FNN_wildi(train_data, test_data)
 # q<-ARMA_FNN(train_data, test_data)
 # w<-simple_FNN(train_data, test_data)
 # x<-rolling_framework(FEATS$ARMA_NN$SSMI, FUN = ARMA_FNN)
-# y<-rolling_framework(FEATS$BASE_NN$SSMI, FUN = simple_FNN)
-#z <-rolling_framework(FEATS$BASE_NN$SSMI, FUN = LPD_FNN_wildi)
+# y<-rolling_framework(FEATS$BASE_NN$SSMI, FUN = simple_FNN_wildi, number_neurons = c(12,6),num_sim = 10)
+# z <-rolling_framework(FEATS$BASE_NN$SSMI, FUN = LPD_FNN_wildi)
 
 # mean_LPD <- STRATS$ARMA_NN$SSMI$LPD$LPD_mean_oos  #plot not correct names and legend
 # par(mfrow = c(1, 1))
@@ -171,7 +184,8 @@ BACKT <- list(BH = lapply(STRATS$BH, function(x){prepare_returns(x)}),
               LPD_ELM_NN = lapply(STRATS$LPD_ELM_NN, function(x){prepare_returns(x)}),
               LPD_ELM = lapply(STRATS$LPD_ELM, function(x){prepare_returns(x)}),
               LPD_NN = lapply(STRATS$LPD_NN, function(x){prepare_returns(x)}),
-              LPD = lapply(STRATS$LPD, function(x){prepare_returns(x)})
+              LPD = lapply(STRATS$LPD, function(x){prepare_returns(x)}),
+              LPD_ELM_NN_100 = lapply(STRATS$LPD_ELM_NN_100, function(x){prepare_returns(x)})
               )
 
 
@@ -198,7 +212,8 @@ EVAL_BT <- list(
   LPD_ELM_NN = lapply(BACKT$LPD_ELM_NN, eval_backtest),
   LPD_ELM = lapply(BACKT$LPD_ELM, eval_backtest),
   LPD_NN = lapply(BACKT$LPD_NN, eval_backtest),
-  LPD = lapply(BACKT$LPD, eval_backtest)
+  LPD = lapply(BACKT$LPD, eval_backtest),
+  LPD_ELM_NN_100 = lapply(BACKT$LPD_ELM_NN_100, eval_backtest)
 )
 
 EVAL_PORTF <- list(
@@ -208,7 +223,8 @@ EVAL_PORTF <- list(
   LPD_ELM_NN = lapply(PORTF$LPD_ELM_NN, eval_backtest),
   LPD_ELM = lapply(PORTF$LPD_ELM, eval_backtest),
   LPD_NN = lapply(PORTF$LPD_NN, eval_backtest),
-  LPD = lapply(PORTF$LPD, eval_backtest)
+  LPD = lapply(PORTF$LPD, eval_backtest),
+  LPD_ELM_NN_100 = lapply(PORTF$LPD_ELM_NN_100, eval_backtest)
 )
 
 # Extract Sharpe ratios and Drawdowns into matrices ------------------------ 
@@ -251,8 +267,8 @@ mat_exposure
 # mean_exposure
 
 # mats without the extra lpd models
-mat_sharpe_focus <- mat_sharpe[, !colnames(mat_sharpe) %in% c("LPD_ELM", "LPD_NN", "LPD")]
-mat_sharpe_adj_focus <- mat_sharpe_adj[, !colnames(mat_sharpe_adj) %in% c("LPD_ELM", "LPD_NN", "LPD")]
+mat_sharpe_focus <- mat_sharpe[, !colnames(mat_sharpe) %in% c("LPD_ELM", "LPD_NN", "LPD", "LPD_ELM_NN_100")]
+mat_sharpe_adj_focus <- mat_sharpe_adj[, !colnames(mat_sharpe_adj) %in% c("LPD_ELM", "LPD_NN", "LPD", "LPD_ELM_NN_100")]
 
 
 # Hypothesis Testing  Backtest Index-----------------------------------------
@@ -270,4 +286,7 @@ ALL_TVALS_DIR <- do.call(rbind, lapply(seq_len(nrow(grid)), function(i) {
   transform(out, strat_A = A, strat_B = B)
 }))
 
-save.image(file = "R/data/main.RData")
+#save.image(file = "R/data/main.RData")
+
+#BA_BACKT <- BACKT
+#save(BA_BACKT, file = "R/data/PA/BA_main.RData")

@@ -2,12 +2,17 @@
 
 LPD_FNN_wildi <- function(train_data, test_data,
                           number_neurons = c(16, 8),
-                          num_sim = 10,#100,
+                          num_sim = 100,
                           epochs = 100,                  #overwritten if ELM = TRUE
                           learning_rate = 0.03,
                           ELM = TRUE,
-                          NN_trading = TRUE) {
-  if (ELM == TRUE) epochs = 2
+                          NN_trading = TRUE,
+                          epochs_ELM = 2) {
+  
+  if (ELM == TRUE) epochs = epochs_ELM #2
+  
+  set.seed(5000) # not 123, 1, 10 #yes 1000
+
   # preprocess ---------------------------------------------------------------
   feat_min <- apply(train_data, 2, min, na.rm = TRUE)
   feat_max <- apply(train_data, 2, max, na.rm = TRUE)
@@ -164,7 +169,7 @@ LPD_FNN_wildi <- function(train_data, test_data,
   #   ts.plot(t(LPD_array_oos[,,k]),col=colo[k])
   
   # averages / Aggregates ------------------------------------------------------
-  ## Mean LPD ----
+  ## Mean LPD ---- LPD_array_oos[i, time, k variables]
   mean_LPD_oos<-NULL
   for (k in 1:dim(LPD_array_oos)[3])
     mean_LPD_oos<-cbind(mean_LPD_oos,apply(LPD_array_oos[,,k],2,mean))

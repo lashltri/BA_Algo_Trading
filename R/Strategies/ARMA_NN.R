@@ -5,13 +5,16 @@ ARMA_FNN <- function(train_data, test_data,
                      num_sim = 100,
                      epochs = 100,
                      learning_rate = 0.3,
-                     ELM = FALSE) {
+                     ELM = FALSE,
+                     bias_correction_c = TRUE) {
   
   arma_y_is  <- train_data$arma_y_t
   arma_y_oos <- test_data$arma_y_t
   
   # remove arma_y_t
-  drop_cols <- c("arma_y_t", "rt_lag0")
+  # drop_cols <- c("arma_y_t", "rt_lag0") 
+  #drop_cols <- c("rt_lag0") 
+  drop_cols <- c("arma_y_t", "rt_lag0", "garch_sd_t") 
   nn_train <- train_data[, setdiff(colnames(train_data), drop_cols)]
   nn_test  <- test_data[,  setdiff(colnames(test_data),  drop_cols)]
   
@@ -21,10 +24,15 @@ ARMA_FNN <- function(train_data, test_data,
   
   nn_results <- simple_FNN_wildi(train_data = nn_train, test_data = nn_test, 
                            number_neurons = number_neurons, 
-                           num_sim = num_sim, epochs = epochs, ELM = ELM)
+                           num_sim = num_sim, epochs = epochs, ELM = ELM, 
+                           learning_rate = learning_rate)
   
-  eps_hat_oos_runs <- nn_results$predicted_oos_mat * as.numeric(test_data$garch_sd_t)
-  
+  if(bias_correction_c == TRUE){
+  eps_hat_oos_runs <- (nn_results$predicted_oos_mat - mean(nn_results$predicted_is_avg)) * as.numeric(test_data$garch_sd_t)
+  }else{
+    print("wack")
+    eps_hat_oos_runs <- (nn_results$predicted_oos_mat) * as.numeric(test_data$garch_sd_t)  
+  }
   
   # Predicted returns
   pred_hat_oos_runs <- as.numeric(arma_y_oos) + eps_hat_oos_runs

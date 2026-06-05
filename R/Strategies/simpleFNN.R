@@ -1,11 +1,9 @@
-
-
 simple_FNN_wildi <- function(train_data, test_data,
-                                number_neurons = c(100),
-                                num_sim = 100,
-                                epochs = 100,
-                                learning_rate = 0.3,
-                                ELM = FALSE) {
+                             number_neurons = c(100),
+                             num_sim = 100,
+                             epochs = 100,
+                             learning_rate = 0.3,
+                             ELM = FALSE) {
   
   # preprocess ---------------------------------------------------------------
   feat_min <- apply(train_data, 2, min, na.rm = TRUE)
@@ -31,6 +29,9 @@ simple_FNN_wildi <- function(train_data, test_data,
   
   signal_oos_runs <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
                          order.by = index(test_data))
+  
+  pred_is_runs <- xts(matrix(NA, nrow = nrow(train_data), ncol = num_sim), #changed
+                      order.by = index(train_data)) #changed
   
   pred_oos_runs <- xts(matrix(NA, nrow = nrow(test_data), ncol = num_sim),
                        order.by = index(test_data))
@@ -115,15 +116,16 @@ simple_FNN_wildi <- function(train_data, test_data,
     
     pred_is  <- as.vector(cache_is$A_list[[length(cache_is$A_list)]])
     pred_oos <- as.vector(cache_oos$A_list[[length(cache_oos$A_list)]])
+    pred_is_runs[, i] <- pred_is #changed
     pred_oos_runs[, i] <- pred_oos
     
     LPD_obj_is <- LPD(cache = cache_is, params = nn_obj$updated_params,
-                        list_layer_size = layer_size, linear_output = TRUE, 
-                        atan_not_sigmoid = FALSE)
-                      
+                      list_layer_size = layer_size, linear_output = TRUE, 
+                      atan_not_sigmoid = FALSE)
+    
     LPD_obj_oos <- LPD(cache = cache_oos, params = nn_obj$updated_params,
-                        list_layer_size = layer_size, linear_output = TRUE, 
-                        atan_not_sigmoid = FALSE)
+                       list_layer_size = layer_size, linear_output = TRUE, 
+                       atan_not_sigmoid = FALSE)
     
     LPD_array_is[i, , ]  <- LPD_obj_is$LPD_t
     LPD_array_oos[i, , ] <- LPD_obj_oos$LPD_t
@@ -148,16 +150,46 @@ simple_FNN_wildi <- function(train_data, test_data,
   signal_oos_avg <- xts(apply(signal_oos_runs, 1, mean, na.rm = TRUE),
                         order.by = index(test_data))
   
+  pred_is_avg <- xts(apply(pred_is_runs, 1, mean, na.rm = TRUE), #changed
+                     order.by = index(train_data)) #changed
+  
   pred_oos_avg <- xts(apply(pred_oos_runs, 1, mean, na.rm = TRUE),
                       order.by = index(test_data))
   
-  mean_LPD_oos<-NULL
-  for (k in 1:dim(LPD_array_oos)[3])
-    mean_LPD_oos<-cbind(mean_LPD_oos,apply(LPD_array_oos[,,k],2,mean))
+  # mean_LPD_oos<-NULL
+  # for (k in 1:dim(LPD_array_oos)[3])
+  #   mean_LPD_oos<-cbind(mean_LPD_oos,apply(LPD_array_oos[,,k],2,mean))
+  # 
+  # mean_LPD_is<-NULL
+  # for (k in 1:dim(LPD_array_is)[3])
+  #   mean_LPD_is<-cbind(mean_LPD_is,apply(LPD_array_is[,,k],2,mean))
   
-  mean_LPD_is<-NULL
-  for (k in 1:dim(LPD_array_is)[3])
-    mean_LPD_is<-cbind(mean_LPD_is,apply(LPD_array_is[,,k],2,mean))
+  
+  mean_LPD_oos <- NULL
+  for (k in 1:dim(LPD_array_oos)[3]) {
+    mean_LPD_oos <- cbind(mean_LPD_oos, apply(LPD_array_oos[,,k], 2, mean))
+  }
+  
+  mean_LPD_oos <- xts(mean_LPD_oos, order.by = index(test_data))
+  colnames(mean_LPD_oos) <- colnames(scaled_test[, -1])
+  
+  mean_LPD_is <- NULL
+  for (k in 1:dim(LPD_array_is)[3]) {
+    mean_LPD_is <- cbind(mean_LPD_is, apply(LPD_array_is[,,k], 2, mean))
+  }
+  
+  mean_LPD_is <- xts(mean_LPD_is, order.by = index(train_data))
+  colnames(mean_LPD_is) <- colnames(scaled_train[, -1])
+  
+  ## Std of LPD ----
+  LPD_std <- NULL
+  for (k in 1:dim(LPD_array_oos)[3]) {  
+    std <- sqrt(apply(t(LPD_array_oos[,,k]), 1, var))
+    LPD_std <- cbind(LPD_std, std)
+  }
+  
+  LPD_std <- xts(LPD_std, order.by = index(test_data))
+  colnames(LPD_std) <- colnames(scaled_test[, -1])
   
   # summary ------------------------------------------------------------------
   cat("Mean IS MSE:", mean(mse_runs[, 1], na.rm = TRUE),
@@ -170,12 +202,18 @@ simple_FNN_wildi <- function(train_data, test_data,
     signal = signal_oos_avg,
     return_out_mat = ret_oos_runs,
     
+    predicted_is_mat = pred_is_runs, #changed
+    predicted_is_avg = pred_is_avg, #changed
     predicted_oos_mat = pred_oos_runs,
     predicted_oos_avg = pred_oos_avg,
     
     # extra info
     cost_hist = cost_hist,
-    LPD = list(LPD_mean_oos = mean_LPD_oos,
-               LPD_mean_is = mean_LPD_is)
+    LPD = list(
+      LPD_mean_oos = mean_LPD_oos,
+      LPD_mean_is  = mean_LPD_is,
+      LPD_sd       = LPD_std,
+      LPD_array = LPD_array_oos
+    )
   ))
 }
